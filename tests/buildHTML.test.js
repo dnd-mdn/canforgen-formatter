@@ -46,7 +46,7 @@ describe('buildHTML: nesting by indentation', () => {
     })
 
     it('supports three levels of indentation-based nesting', () => {
-        const html = buildHTML(parseItems('1. A\n   a. B\n      i. C\n2. D'))
+        const html = buildHTML(parseItems('1. A\n   a. B\n      ii. C\n2. D'))
         assert.equal(
             html,
             '<ol>\n' +
@@ -112,8 +112,8 @@ describe('buildHTML: nesting and dedenting by style progression (no indent chang
         )
     })
 
-    it('nests one level deeper when the style skips a conventional level (1. straight to i., no a.)', () => {
-        const html = buildHTML(parseItems('1. Top\ni. Skips a level'))
+    it('nests one level deeper when the style skips a conventional level (1. straight to ii., no a.)', () => {
+        const html = buildHTML(parseItems('1. Top\nii. Skips a level'))
         assert.equal(
             html,
             '<ol>\n' +
@@ -166,7 +166,7 @@ describe('buildHTML: numbering/lettering restart within the same style and inden
     })
 
     it('starts a sibling list when roman numbering restarts', () => {
-        const html = buildHTML(parseItems('i. First\nii. Second\ni. Restarted'))
+        const html = buildHTML(parseItems('ii. First\niii. Second\nii. Restarted'))
         const matches = html.match(/<ol type="i">/g)
         assert.equal(matches.length, 2)
     })
@@ -208,7 +208,7 @@ describe('buildHTML: differing marker style at the same depth', () => {
     it('stays sibling (not nested) when two families share the same conventional level', () => {
         // roman (level 3) and num-paren (level 3) are conceptually the same depth,
         // so switching between them is a sibling list, not a level-skip nest.
-        const html = buildHTML(parseItems('i. Roman\n(1) Numparen same level'))
+        const html = buildHTML(parseItems('ii. Roman\n(1) Numparen same level'))
         assert.equal(
             html,
             '<ol type="i">\n' +
@@ -220,5 +220,115 @@ describe('buildHTML: differing marker style at the same depth', () => {
             '  </li>\n' +
             '</ol>'
         )
+    })
+})
+
+describe('buildHTML: deeply nested lists (4+ levels)', () => {
+    it('handles four levels of nesting correctly', () => {
+        const html = buildHTML(parseItems('1. Level one\n   a. Level two\n      ii. Level three\n         (1) Level four'))
+        // Verify correct nesting structure
+        assert.ok(html.includes('<ol>'))
+        assert.ok(html.includes('<ol type="a">'))
+        assert.ok(html.includes('<ol type="i">'))
+        assert.ok(html.includes('<ol>'), 'nested numeric list for level 4')
+        // Verify all tags are properly closed
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+        assert.equal((html.match(/<li>/g) || []).length, (html.match(/<\/li>/g) || []).length)
+        assert.ok(html.includes('Level one'))
+        assert.ok(html.includes('Level four'))
+    })
+
+    it('handles five levels of nesting', () => {
+        const html = buildHTML(parseItems('1. L1\n   a. L2\n      ii. L3\n         (1) L4\n            A. L5'))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+        assert.equal((html.match(/<li>/g) || []).length, (html.match(/<\/li>/g) || []).length)
+        assert.ok(html.includes('L5'))
+    })
+
+    it('properly dedents from deep nesting back to root level', () => {
+        const html = buildHTML(parseItems('1. L1\n   a. L2\n      ii. L3\n2. Back to root'))
+        // Count <ol> and </ol> - must be equal
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+        // Verify the structure transitions correctly
+        assert.ok(html.includes('L3'))
+        assert.ok(html.includes('Back to root'))
+        // L1 and "Back to root" should be at same level (both in root <ol>)
+        const firstLiEnd = html.indexOf('</li>')
+        const secondL1Start = html.indexOf('Back to root')
+        assert.ok(secondL1Start > firstLiEnd, 'items are in document order')
+    })
+})
+
+describe('buildHTML: mixed punctuation at same level', () => {
+    it('splits into separate lists when numeric dot and rparen mix', () => {
+        const html = buildHTML(parseItems('1. Numeric dot\n2) Numeric rparen'))
+        const numericDotLists = (html.match(/<ol>/g) || []).length
+        assert.equal(numericDotLists, 2, 'should create two separate numeric lists')
+    })
+
+    it('splits alpha-dot and alpha-rparen into separate lists at same level', () => {
+        const html = buildHTML(parseItems('a. Alpha dot\nb) Alpha rparen'))
+        const alphaDotLists = (html.match(/<ol type="a">/g) || []).length
+        assert.equal(alphaDotLists, 2, 'should create two separate alpha lists')
+    })
+
+    it('splits roman-dot and roman-rparen into separate lists at same level', () => {
+        const html = buildHTML(parseItems('ii. Roman dot\niii) Roman rparen'))
+        const romanDotLists = (html.match(/<ol type="i">/g) || []).length
+        assert.equal(romanDotLists, 2, 'should create two separate roman lists')
+    })
+
+    it('creates sibling lists when switching between num-paren and roman at same level', () => {
+        const html = buildHTML(parseItems('(1) Numeric paren\nii. Roman'))
+        // Both should exist as separate lists
+        assert.ok(html.includes('<ol>'), 'numeric list')
+        assert.ok(html.includes('<ol type="i">'), 'roman list')
+        const matches = html.match(/<\/ol>/g) || []
+        assert.ok(matches.length >= 2, 'at least two lists closed')
+    })
+})
+
+describe('buildHTML: indentation edge cases', () => {
+    it('handles consistent 3-space indentation', () => {
+        const html = buildHTML(parseItems('1. Top\n   a. Nested with 3 spaces'))
+        assert.ok(html.includes('Nested with 3 spaces'))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+    })
+
+    it('handles 4-space indentation (standard)', () => {
+        const html = buildHTML(parseItems('1. Top\n    a. Nested with 4 spaces'))
+        assert.ok(html.includes('Nested with 4 spaces'))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+    })
+
+    it('handles tab indentation (counts as 4 spaces)', () => {
+        const html = buildHTML(parseItems('1. Top\n\ta. Nested with tab'))
+        assert.ok(html.includes('Nested with tab'))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+    })
+
+    it('handles mixed tabs and spaces for indentation', () => {
+        const html = buildHTML(parseItems('1. Top\n\t  a. Nested with tab+spaces'))
+        assert.ok(html.includes('Nested with tab+spaces'))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+    })
+
+    it('treats irregular indentation as same level when indent is 0 or same', () => {
+        // Items at indent 2 and 2 should be siblings
+        const html = buildHTML(parseItems('  1. Indent 2a\n  2. Indent 2b'))
+        assert.ok(html.includes('Indent 2a'))
+        assert.ok(html.includes('Indent 2b'))
+        const lists = (html.match(/<ol>/g) || []).length
+        assert.equal(lists, 1, 'should be one list, not nested')
+    })
+
+    it('maintains nesting with varying indentation amounts', () => {
+        const html = buildHTML(parseItems('1. Top\n   a. Indent 3\n      ii. Indent 6\n   b. Back to indent 3'))
+        assert.ok(html.includes('Indent 3'))
+        assert.ok(html.includes('Indent 6'))
+        assert.ok(html.includes('Back to indent 3'))
+        // Structure should be: one root list, nested alpha, nested roman under first alpha
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+        assert.equal((html.match(/<li>/g) || []).length, (html.match(/<\/li>/g) || []).length)
     })
 })

@@ -24,7 +24,7 @@ describe('convert', () => {
             '2. Details',
             '   a. Sub-point one',
             '   b. Sub-point two',
-            '      i. Deep point',
+            '      ii. Deep point',
             '3. Summary',
         ].join('\n')
         const html = convert(text)

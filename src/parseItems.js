@@ -27,7 +27,7 @@ export function parseItems(text) {
 
                     const prev = lastItemAtIndent(indent)
                     const isSingleRomanLetter = marker.length === 1
-                    const isAlwaysRoman = marker === 'I' || marker === 'i'
+                    const isAlwaysRoman = marker === 'I'
 
                     if (isSingleRomanLetter && !isAlwaysRoman) {
                         const prevIsRoman = prev && isRomanKey(prev.key) && typeof prev.romanValue === 'number'

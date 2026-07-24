@@ -67,10 +67,10 @@ describe('parseItems: marker recognition', () => {
 })
 
 describe('parseItems: ambiguous single-letter roman numerals', () => {
-    it('treats "i." as roman numeral one, not alpha, even in isolation', () => {
+    it('treats "i." as alpha (not roman) in isolation to support alphabetic lists', () => {
         const items = parseItems('i. First')
-        assert.equal(items[0].key, 'roman-lower-dot')
-        assert.equal(items[0].romanValue, 1)
+        assert.equal(items[0].key, 'alpha-dot')
+        assert.equal(items[0].orderValue, 9)
     })
 
     it('treats "I." as roman numeral one, not alpha, even in isolation', () => {
@@ -79,10 +79,10 @@ describe('parseItems: ambiguous single-letter roman numerals', () => {
         assert.equal(items[0].romanValue, 1)
     })
 
-    it('a run of "i., ii., iii." stays roman throughout', () => {
-        const items = parseItems('i. First\nii. Second\niii. Third')
+    it('a run of "ii., iii." stays roman (but single i. is alpha)', () => {
+        const items = parseItems('ii. Second\niii. Third')
         assert.ok(items.every(i => i.key === 'roman-lower-dot'))
-        assert.deepEqual(items.map(i => i.romanValue), [1, 2, 3])
+        assert.deepEqual(items.map(i => i.romanValue), [2, 3])
     })
 
     it('falls back to alpha for an isolated ambiguous letter like "v." (lowercase)', () => {
@@ -188,6 +188,115 @@ describe('parseItems: continuation lines and blank lines', () => {
 
     it('returns an empty array for a plain paragraph with no markers', () => {
         assert.deepEqual(parseItems('Just a paragraph\nwith no markers'), [])
+    })
+})
+
+describe('parseItems: alphabetic lists with ambiguous single letters', () => {
+    it('parses a lowercase alphabetic list from a through i (dot)', () => {
+        const items = parseItems('a. First\nb. Second\nc. Third\nd. Fourth\ne. Fifth\nf. Sixth\ng. Seventh\nh. Eighth\ni. Ninth')
+        assert.equal(items.length, 9)
+        assert.ok(items.every(i => i.key === 'alpha-dot'), 'all items should be alpha-dot, not roman')
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+        assert.deepEqual(items.map(i => i.content), ['First', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth'])
+    })
+
+    it('parses a lowercase alphabetic list from a through i (rparen)', () => {
+        const items = parseItems('a) First\nb) Second\nc) Third\nd) Fourth\ne) Fifth\nf) Sixth\ng) Seventh\nh) Eighth\ni) Ninth')
+        assert.equal(items.length, 9)
+        assert.ok(items.every(i => i.key === 'alpha-rparen'), 'all items should be alpha-rparen, not roman')
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    })
+
+    it('parses an uppercase alphabetic list from A through H (dot); uppercase I is always roman', () => {
+        const items = parseItems('A. First\nB. Second\nC. Third\nD. Fourth\nE. Fifth\nF. Sixth\nG. Seventh\nH. Eighth')
+        assert.equal(items.length, 8)
+        assert.ok(items.every(i => i.key === 'ALPHA-dot'), 'A-H should all be ALPHA-dot')
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 5, 6, 7, 8])
+
+        // Uppercase I is unambiguous roman, even in alphabetic context
+        const withI = parseItems('A. First\nB. Second\nI. Roman One')
+        assert.equal(withI[0].key, 'ALPHA-dot')
+        assert.equal(withI[1].key, 'ALPHA-dot')
+        assert.equal(withI[2].key, 'roman-dot', 'uppercase I is always treated as roman')
+        assert.equal(withI[2].romanValue, 1)
+    })
+
+    it('parses an uppercase alphabetic list from A through H (rparen)', () => {
+        const items = parseItems('A) First\nB) Second\nC) Third\nD) Fourth\nE) Fifth\nF) Sixth\nG) Seventh\nH) Eighth')
+        assert.equal(items.length, 8)
+        assert.ok(items.every(i => i.key === 'ALPHA-rparen'), 'A-H should all be ALPHA-rparen')
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 5, 6, 7, 8])
+    })
+
+    it('handles lowercase v in alphabetic context (should be alpha)', () => {
+        const items = parseItems('a. First\nb. Second\nc. Third\nd. Fourth\ne. Fifth\nf. Sixth\ng. Seventh\nh. Eighth\ni. Ninth\nj. Tenth\nk. Eleventh\nl. Twelfth\nm. Thirteenth\nn. Fourteenth\no. Fifteenth\np. Sixteenth\nq. Seventeenth\nr. Eighteenth\ns. Nineteenth\nt. Twentieth\nu. Twenty-first\nv. Twenty-second')
+        assert.equal(items.length, 22)
+        const vItem = items.find(i => i.orderValue === 22)
+        assert.equal(vItem.key, 'alpha-dot', 'v should be treated as alpha letter, not roman')
+        assert.equal(vItem.content, 'Twenty-second')
+    })
+
+    it('handles lowercase x in alphabetic context (should be alpha)', () => {
+        const items = parseItems('a) letter a\nb) letter b\nc) letter c\nd) letter d\ne) letter e\nf) letter f\ng) letter g\nh) letter h\ni) letter i\nj) letter j\nk) letter k\nl) letter l\nm) letter m\nn) letter n\no) letter o\np) letter p\nq) letter q\nr) letter r\ns) letter s\nt) letter t\nu) letter u\nv) letter v\nw) letter w\nx) letter x')
+        assert.equal(items.length, 24)
+        const xItem = items.find(i => i.orderValue === 24)
+        assert.equal(xItem.key, 'alpha-rparen', 'x should be treated as alpha letter, not roman')
+        assert.equal(xItem.content, 'letter x')
+    })
+
+    it('disambiguates: single "i." in isolation is treated as alpha to support alphabetic lists', () => {
+        // Lowercase 'i' in isolation defaults to alpha (the 9th letter), not roman.
+        // If you need lowercase roman numerals, use multi-letter forms like "ii." or uppercase "I."
+        const items = parseItems('i. First item')
+        assert.equal(items[0].key, 'alpha-dot')
+        assert.equal(items[0].orderValue, 9)
+    })
+
+    it('disambiguates: single "v." in isolation should default to alpha (no prior roman context)', () => {
+        // "v." alone is ambiguous but with proper parsing it should still match alpha pattern
+        const items = parseItems('v. Single item')
+        assert.equal(items[0].key, 'alpha-dot')
+        assert.equal(items[0].orderValue, 22)
+    })
+
+    it('early alphabet letters that double as roman numerals (c, d) stay alpha in sequences', () => {
+        // c = 100 in roman, 3rd letter; d = 500 in roman, 4th letter
+        // In alphabetic context, they should remain alphabetic
+        const items = parseItems('a. First\nb. Second\nc. Third\nd. Fourth\ne. Fifth')
+        assert.equal(items.length, 5)
+        assert.deepEqual(items.map(i => i.key), ['alpha-dot', 'alpha-dot', 'alpha-dot', 'alpha-dot', 'alpha-dot'])
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 5])
+    })
+
+    it('later alphabet letters that double as roman numerals (l, m) stay alpha in sequences', () => {
+        // l = 50 in roman, 12th letter; m = 1000 in roman, 13th letter
+        const items = parseItems('j. Tenth\nk. Eleventh\nl. Twelfth\nm. Thirteenth\nn. Fourteenth')
+        assert.equal(items.length, 5)
+        assert.ok(items.every(i => i.key === 'alpha-dot'))
+        assert.deepEqual(items.map(i => i.orderValue), [10, 11, 12, 13, 14])
+    })
+
+    it('parenthesized ambiguous letters are clearly alpha, never roman', () => {
+        const items = parseItems('(a) First\n(b) Second\n(c) Third\n(d) Fourth\n(l) Twelfth\n(m) Thirteenth')
+        assert.equal(items.length, 6)
+        assert.ok(items.every(i => i.key === 'alpha-paren'))
+        assert.deepEqual(items.map(i => i.orderValue), [1, 2, 3, 4, 12, 13])
+    })
+
+    it('mixed dot and rparen for ambiguous letters stays alpha', () => {
+        const items = parseItems('a. First\nb) Second\nc. Third\nd) Fourth\nl. Twelfth\nm) Thirteenth')
+        assert.equal(items.length, 6)
+        assert.deepEqual(items.map(i => i.key), ['alpha-dot', 'alpha-rparen', 'alpha-dot', 'alpha-rparen', 'alpha-dot', 'alpha-rparen'])
+    })
+
+    it('ambiguous letters preceded by clear multi-letter roman stay roman', () => {
+        // If we start with a valid multi-letter roman like "xl" (40), then single "l" continues as roman
+        const items = parseItems('xl. Forty\nli. Fifty-one')
+        assert.equal(items[0].key, 'roman-lower-dot')
+        assert.equal(items[0].romanValue, 40)
+        // "li" is multi-letter, so it's definitely roman
+        assert.equal(items[1].key, 'roman-lower-dot')
+        assert.equal(items[1].romanValue, 51)
     })
 })
 
