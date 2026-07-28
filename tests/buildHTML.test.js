@@ -288,6 +288,24 @@ describe('buildHTML: mixed punctuation at same level', () => {
     })
 })
 
+describe('buildHTML: bilingual section break', () => {
+    it('flushes an open sub-list back to top level at the section break, even though the marker style would otherwise nest', () => {
+        // "1." (level 1) is open with a nested "A." (level 2, indent 0) sub-list, per the normal
+        // style-progression rule. After the bilingual separator, the next "A." should NOT nest
+        // into that still-open sub-list -- it must start a fresh top-level list.
+        const html = buildHTML(parseItems(
+            '1. English body\nA. Nested under it normally\n' +
+            'End of English text//le texte français suit\n' +
+            'A. French reference, should not nest'
+        ))
+        assert.equal((html.match(/<ol/g) || []).length, (html.match(/<\/ol>/g) || []).length)
+        assert.equal((html.match(/^<ol/gm) || []).length, 2, 'the post-break list is a new top-level list, not nested')
+        const firstListEnd = html.indexOf('</ol>')
+        const secondListStart = html.indexOf('French reference')
+        assert.ok(secondListStart > firstListEnd, 'the post-break item comes after the first list is fully closed')
+    })
+})
+
 describe('buildHTML: indentation edge cases', () => {
     it('handles consistent 3-space indentation', () => {
         const html = buildHTML(parseItems('1. Top\n   a. Nested with 3 spaces'))

@@ -1,6 +1,5 @@
-export function escapeHTML(text) {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+export { escapeHTML } from './html.js'
+import { renderContent } from './linkMarker.js'
 
 export function buildHTML(items) {
     if (!items.length) return ''
@@ -8,10 +7,18 @@ export function buildHTML(items) {
     const stack = [] // { key, tag, level, indent, listDepth, itemDepth, lastOrder }
     const pad = n => '  '.repeat(n)
 
+    const closeAll = () => {
+        while (stack.length > 0) {
+            const { tag, listDepth, itemDepth } = stack[stack.length - 1]
+            out += `${pad(itemDepth)}</li>\n${pad(listDepth)}</${tag}>\n`
+            stack.pop()
+        }
+    }
+
     const openList = (item, listDepth) => {
         const itemDepth = listDepth + 1
         const attrs = item.tag === 'ol' && item.type !== '1' ? ` type="${item.type}"` : ''
-        out += `${pad(listDepth)}<${item.tag}${attrs}>\n${pad(itemDepth)}<li>${escapeHTML(item.content)}\n`
+        out += `${pad(listDepth)}<${item.tag}${attrs}>\n${pad(itemDepth)}<li>${renderContent(item.content, item.lang)}\n`
         stack.push({
             key: item.key,
             tag: item.tag,
@@ -24,6 +31,8 @@ export function buildHTML(items) {
     }
 
     for (const item of items) {
+        if (item.sectionBreak) closeAll()
+
         if (stack.length === 0) {
             openList(item, 0)
             continue
@@ -84,7 +93,7 @@ export function buildHTML(items) {
                 } else {
                     // Same list level and marker style: close current item and open the next item.
                     const { itemDepth } = active
-                    out += `${pad(itemDepth)}</li>\n${pad(itemDepth)}<li>${escapeHTML(item.content)}\n`
+                    out += `${pad(itemDepth)}</li>\n${pad(itemDepth)}<li>${renderContent(item.content, item.lang)}\n`
                     if (typeof item.orderValue === 'number') active.lastOrder = item.orderValue
                 }
             } else {
@@ -98,11 +107,7 @@ export function buildHTML(items) {
         }
     }
 
-    while (stack.length > 0) {
-        const { tag, listDepth, itemDepth } = stack[stack.length - 1]
-        out += `${pad(itemDepth)}</li>\n${pad(listDepth)}</${tag}>\n`
-        stack.pop()
-    }
+    closeAll()
 
     return out.trim()
 }

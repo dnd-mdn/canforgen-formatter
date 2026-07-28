@@ -300,6 +300,84 @@ describe('parseItems: alphabetic lists with ambiguous single letters', () => {
     })
 })
 
+describe('parseItems: inline reference-label markers', () => {
+    it('splits "References: A. text" so A. is recognized as a list item', () => {
+        const items = parseItems('References: A. First ref\nB. Second ref')
+        assert.equal(items.length, 2)
+        assert.deepEqual(items.map(i => i.key), ['ALPHA-dot', 'ALPHA-dot'])
+        assert.deepEqual(items.map(i => i.content), ['First ref', 'Second ref'])
+    })
+
+    it('recognizes REFS:, Ref:, and Refs: as the same label', () => {
+        assert.equal(parseItems('REFS: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Ref: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Refs: A. x')[0].key, 'ALPHA-dot')
+    })
+
+    it('recognizes accented French label variants (Référence(s):, Réf(s):)', () => {
+        assert.equal(parseItems('Référence: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Références: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Réf: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Réfs: A. x')[0].key, 'ALPHA-dot')
+    })
+
+    it('leaves an unlabeled line with a colon before it unaffected', () => {
+        const items = parseItems('Note: see A. below for details')
+        assert.deepEqual(items, [])
+    })
+})
+
+describe('parseItems: bilingual section break', () => {
+    it('marks the next item after "End of English text//..." with sectionBreak', () => {
+        const items = parseItems('1. First\nEnd of English text//le texte français suit\nA. Second')
+        assert.equal(items.length, 2)
+        assert.equal(items[0].sectionBreak, false)
+        assert.equal(items[1].sectionBreak, true)
+    })
+
+    it('recognizes the reversed French-first separator too', () => {
+        const items = parseItems('1. Premier\nFin du texte français//English text follows\nA. Second')
+        assert.equal(items[1].sectionBreak, true)
+    })
+
+    it('drops unmatched lines between the separator and the next marker instead of gluing them', () => {
+        const items = parseItems('1. First\nEnd of English text//le texte français suit\nTitre français\nA. Second')
+        assert.equal(items.length, 2)
+        assert.equal(items[0].content, 'First')
+        assert.equal(items[1].content, 'Second')
+    })
+
+    it('does not treat an ordinary line mentioning both languages as a break', () => {
+        const items = parseItems('1. This message is in english and français both')
+        assert.equal(items.length, 1)
+        assert.equal(items[0].sectionBreak, false)
+    })
+
+    it('defaults to English when there is no language break in the document', () => {
+        const items = parseItems('1. First\n2. Second')
+        assert.ok(items.every(i => i.lang === 'en'))
+    })
+
+    it('switches items to French after "End of English text//...suit"', () => {
+        const items = parseItems('1. English\nEnd of English text//le texte français suit\n1. French')
+        assert.equal(items[0].lang, 'en')
+        assert.equal(items[1].lang, 'fr')
+    })
+
+    it('switches items back to English after "Fin du texte français//...follows"', () => {
+        const items = parseItems(
+            '1. English one\n' +
+            'End of English text//le texte français suit\n' +
+            '1. French one\n' +
+            'Fin du texte français//English text follows\n' +
+            '1. English two'
+        )
+        assert.equal(items[0].lang, 'en')
+        assert.equal(items[1].lang, 'fr')
+        assert.equal(items[2].lang, 'en')
+    })
+})
+
 describe('parseItems: indentation and content extraction', () => {
     it('tracks indentation using spaces', () => {
         const items = parseItems('1. Top\n   a. Nested')

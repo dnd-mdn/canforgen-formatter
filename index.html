@@ -9,10 +9,19 @@
     <link rel="icon" href="https://www.canada.ca/etc/designs/canada/wet-boew/assets/favicon.ico" type="image/x-icon" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
         integrity="sha256-2FMn2Zx6PuH5tdBQDRNwrOo60ts5wWPC9R8jK67b3t4=" crossorigin="anonymous">
+
+    <script type="importmap">
+    {
+        "imports": {
+            "jszip": "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm"
+        }
+    }
+    </script>
 </head>
 
 <body>
     <main>
+        
         <div class="container my-5">
             <ol class="breadcrumb">
                 <li class="breadcrumb-item"><a href="https://github.com/dnd-mdn">dnd-mdn</a></li>
@@ -25,8 +34,14 @@
             <p>Copy and paste the contents of the CANFORGEN text component below to format it into HTML.</p>
 
             <div class="mb-3">
+                <label for="docx-input" class="form-label fw-semibold">Upload .docx</label>
+                <input type="file" id="docx-input" class="form-control" accept=".docx">
+                <div id="docx-error" class="text-danger small mt-1" style="display:none"></div>
+            </div>
+
+            <div class="mb-3">
                 <label for="input" class="form-label fw-semibold">Plaintext input</label>
-                <textarea id="input" class="form-control font-monospace" rows="12" placeholder="Paste plaintext list here..."></textarea>
+                <textarea id="input" class="form-control font-monospace" rows="12" placeholder="Paste plaintext list here, or upload a .docx above..."></textarea>
             </div>
 
             <button id="convert-btn" class="btn btn-primary mb-4">Convert</button>
