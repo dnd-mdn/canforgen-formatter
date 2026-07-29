@@ -75,3 +75,44 @@ describe('renderContent: .mil.ca network-access disclaimer', () => {
         assert.equal(renderContent(content), '<a href="not a url">broken</a>')
     })
 })
+
+describe('renderContent: mailto spelled-out punctuation', () => {
+    it('converts (at), (dash), (plus), and (underscore) to symbols in mailto link text', () => {
+        const content = encodeLink(
+            'mailto:++OTGRECRUIT@CANSOFCOM@OTTAWA-HULL',
+            '(plus)(plus)otgrecruit(at)cansofcom(at)ottawa(dash)hull'
+        )
+        assert.equal(
+            renderContent(content),
+            '<a href="mailto:++OTGRECRUIT@CANSOFCOM@OTTAWA-HULL">++otgrecruit@cansofcom@ottawa-hull</a>'
+        )
+    })
+
+    it('converts (underscore) as well', () => {
+        const content = encodeLink('mailto:CJIRU_RECRUITING@forces.gc.ca', 'cjiru(underscore)recruiting(at)forces.gc.ca')
+        assert.equal(
+            renderContent(content),
+            '<a href="mailto:CJIRU_RECRUITING@forces.gc.ca">cjiru_recruiting@forces.gc.ca</a>'
+        )
+    })
+
+    it('is case-insensitive on the token spelling', () => {
+        const content = encodeLink('mailto:a@b.com', 'a(AT)b.com')
+        assert.equal(renderContent(content), '<a href="mailto:a@b.com">a@b.com</a>')
+    })
+
+    it('leaves the href itself untouched', () => {
+        const content = encodeLink('mailto:a@b.com', 'a(at)b.com')
+        assert.match(renderContent(content), /href="mailto:a@b\.com"/)
+    })
+
+    it('does not touch (at)/(dash)/(plus)/(underscore)-shaped text in a non-mailto link', () => {
+        const content = encodeLink('https://example.com', 'a(at)b(dash)c')
+        assert.equal(renderContent(content), '<a href="https://example.com">a(at)b(dash)c</a>')
+    })
+
+    it('leaves ordinary mailto text with no spelled-out tokens unchanged', () => {
+        const content = encodeLink('mailto:csor.recruiting@forces.gc.ca', 'csor.recruiting@forces.gc.ca')
+        assert.equal(renderContent(content), '<a href="mailto:csor.recruiting@forces.gc.ca">csor.recruiting@forces.gc.ca</a>')
+    })
+})

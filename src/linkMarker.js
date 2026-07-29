@@ -25,6 +25,16 @@ function isMilCaHost(href) {
     }
 }
 
+// Accessible-document conventions sometimes spell out email punctuation as
+// words (screen readers read "@" oddly otherwise) -- e.g. "name(at)example.com".
+// Restore the real characters in the visible link text for mailto: links.
+const MAILTO_TOKENS = { '(at)': '@', '(dash)': '-', '(plus)': '+', '(underscore)': '_' }
+const MAILTO_TOKEN_RE = /\(at\)|\(dash\)|\(plus\)|\(underscore\)/gi
+
+function normalizeMailtoText(text) {
+    return text.replace(MAILTO_TOKEN_RE, m => MAILTO_TOKENS[m.toLowerCase()])
+}
+
 function escapeAttribute(text) {
     return escapeHTML(text).replace(/"/g, '&quot;')
 }
@@ -41,7 +51,9 @@ export function renderContent(content, lang = 'en') {
     while ((m = LINK_RE.exec(content))) {
         result += escapeHTML(content.slice(lastIndex, m.index))
         const href = m[2]
-        result += `<a href="${escapeAttribute(href)}">${escapeHTML(m[1])}</a>`
+        const isMailto = /^mailto:/i.test(href)
+        const linkText = isMailto ? normalizeMailtoText(m[1]) : m[1]
+        result += `<a href="${escapeAttribute(href)}">${escapeHTML(linkText)}</a>`
         if (isMilCaHost(href)) result += escapeHTML(MIL_CA_DISCLAIMER[lang] ?? MIL_CA_DISCLAIMER.en)
         lastIndex = LINK_RE.lastIndex
     }
