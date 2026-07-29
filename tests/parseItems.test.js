@@ -376,6 +376,31 @@ describe('parseItems: bilingual section break', () => {
         assert.equal(items[1].lang, 'fr')
         assert.equal(items[2].lang, 'en')
     })
+
+    it('treats a run of 3+ blank lines as an implicit language break', () => {
+        const items = parseItems('1. English\n\n\n\n1. French')
+        assert.equal(items[0].lang, 'en')
+        assert.equal(items[0].sectionBreak, false)
+        assert.equal(items[1].lang, 'fr')
+        assert.equal(items[1].sectionBreak, true)
+    })
+
+    it('does not treat a single blank line (the normal item gap) as a language break', () => {
+        const items = parseItems('1. First\n\n2. Second')
+        assert.equal(items[1].sectionBreak, false)
+        assert.equal(items[1].lang, 'en')
+    })
+
+    it('does not treat two blank lines as a language break', () => {
+        const items = parseItems('1. First\n\n\n2. Second')
+        assert.equal(items[1].sectionBreak, false)
+        assert.equal(items[1].lang, 'en')
+    })
+
+    it('toggles back and forth across multiple blank-run breaks', () => {
+        const items = parseItems('1. English\n\n\n\n1. French\n\n\n\n1. English again')
+        assert.deepEqual(items.map(i => i.lang), ['en', 'fr', 'en'])
+    })
 })
 
 describe('parseItems: indentation and content extraction', () => {

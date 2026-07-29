@@ -25,11 +25,19 @@ function nextLanguage(line, currentLang) {
     return currentLang === 'en' ? 'fr' : 'en'
 }
 
+// Some CANFORGENs separate the two language versions with nothing but a run of
+// blank lines instead of the "End of English text//..." marker. Every ordinary
+// paragraph gap in these documents is exactly one blank line, so a run this long
+// is never incidental spacing -- treat it the same as an explicit language break,
+// toggling the language since there's no marker text to say which way.
+const BLANK_RUN_SECTION_BREAK_THRESHOLD = 3
+
 export function parseItems(text) {
     text = text.replace(REFERENCE_LABEL_RE, '$1\n')
     const items = []
     let sectionBreakPending = false
     let currentLang = 'en'
+    let blankRun = 0
 
     const lastItemAtIndent = indent => {
         for (let i = items.length - 1; i >= 0; i--) {
@@ -42,8 +50,20 @@ export function parseItems(text) {
         if (isLanguageBreakLine(line)) {
             sectionBreakPending = true
             currentLang = nextLanguage(line, currentLang)
+            blankRun = 0
             continue
         }
+
+        if (!line.trim()) {
+            blankRun++
+            continue
+        }
+
+        if (blankRun >= BLANK_RUN_SECTION_BREAK_THRESHOLD) {
+            sectionBreakPending = true
+            currentLang = currentLang === 'en' ? 'fr' : 'en'
+        }
+        blankRun = 0
 
         let matched = false
         const leading = line.match(/^\s*/)?.[0] || ''
