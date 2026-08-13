@@ -341,6 +341,29 @@ describe('parseItems: alphabetic list overflow past z (aa, ab, ...)', () => {
         assert.equal(items[0].content, 'Item z ac. Not a valid continuation')
     })
 
+    it('continues an alpha overflow sequence through two-letter markers built purely from roman-charset letters', () => {
+        // "z." (26) is followed by two-letter markers like "aa." (27) through "cc." (81).
+        // "cc.", "cl.", "cm.", "dc.", "dd.", "mm.", etc. are also valid multi-letter roman
+        // numerals, so without a fix they'd be misread as roman and split the list.
+        const lines = []
+        for (let i = 1; i <= 90; i++) {
+            let s = ''
+            let n = i
+            while (n > 0) { const rem = (n - 1) % 26; s = String.fromCharCode(97 + rem) + s; n = Math.floor((n - 1) / 26) }
+            lines.push(`${s}. Item ${i}`)
+        }
+        const items = parseItems(lines.join('\n'))
+        assert.equal(items.length, 90)
+        assert.ok(items.every(i => i.key === 'alpha-dot'), 'the whole list should stay alpha-dot, not split into roman sublists')
+        assert.deepEqual(items.map(i => i.orderValue), Array.from({ length: 90 }, (_, i) => i + 1))
+    })
+
+    it('a lone two-letter roman-charset marker with no preceding alpha context is still read as roman', () => {
+        const items = parseItems('cc. Two hundred')
+        assert.equal(items[0].key, 'roman-lower-dot')
+        assert.equal(items[0].romanValue, 200)
+    })
+
     it('continues an overflow sequence across dot/rparen style, like roman numerals do', () => {
         const items = parseItems('z) Item z\naa. Item aa')
         assert.equal(items.length, 2)

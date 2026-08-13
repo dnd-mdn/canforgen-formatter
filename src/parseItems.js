@@ -97,6 +97,13 @@ export function parseItems(text) {
                         const prevIsRoman = prev && isRomanKey(prev.key) && typeof prev.romanValue === 'number'
                         const continuesRomanSequence = prevIsRoman && romanValue === prev.romanValue + 1
                         if (!continuesRomanSequence) continue
+                    } else if (!isAlwaysRoman) {
+                        // Multi-letter markers are normally read as roman unconditionally, but a long
+                        // alphabetic list overflowing past "z" can reach two-letter markers built purely
+                        // from roman-charset letters (e.g. "cc.", "dd.", "cl."). When one of those would
+                        // continue an alpha sequence already in progress, prefer the alpha reading.
+                        const prevIsAlpha = prev && isAlphaKey(prev.key) && typeof prev.orderValue === 'number'
+                        if (prevIsAlpha && alphaToInt(marker) === prev.orderValue + 1) continue
                     }
                 } else if (isNumericKey(p.key)) {
                     const marker = line.match(/^\s*\(?(\d+)\)?[\.)]\s+/)?.[1]
