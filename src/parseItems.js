@@ -74,6 +74,7 @@ export function parseItems(text) {
             sectionBreakPending = true
             currentLang = currentLang === 'en' ? 'fr' : 'en'
         }
+        const hadBlankRun = blankRun > 0
         blankRun = 0
 
         let matched = false
@@ -141,8 +142,31 @@ export function parseItems(text) {
                 break
             }
         }
-        if (!matched && line.trim() && items.length > 0 && !sectionBreakPending) {
-            items[items.length - 1].content += ' ' + line.trim()
+        if (!matched && line.trim() && !sectionBreakPending) {
+            const last = items[items.length - 1]
+            if (last && !(last.tag === 'p' && hadBlankRun)) {
+                // Continues the preceding list item or paragraph: either it's a list
+                // item (blank lines between its lines never split it, same as always),
+                // or it's a paragraph with no blank line since its last line.
+                last.content += ' ' + line.trim()
+            } else {
+                // Nothing to continue -- either this is the start of the document, or
+                // a blank line just closed off the preceding paragraph. Freeform text
+                // outside any list (a message header, a "Refs:" label, ...) is kept as
+                // its own paragraph rather than silently dropped.
+                items.push({
+                    key: 'p',
+                    tag: 'p',
+                    type: null,
+                    level: null,
+                    indent,
+                    romanValue: null,
+                    orderValue: null,
+                    sectionBreak: false,
+                    lang: currentLang,
+                    content: line.trim()
+                })
+            }
         }
     }
     return items

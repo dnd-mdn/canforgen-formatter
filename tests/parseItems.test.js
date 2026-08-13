@@ -135,24 +135,37 @@ describe('parseItems: ambiguous single-letter roman numerals', () => {
 })
 
 describe('parseItems: malformed and non-matching markers', () => {
-    it('drops an invalid multi-letter roman numeral entirely (matches no pattern)', () => {
+    // A line that fails every marker pattern is never a valid list item, but it's
+    // still real document text -- it's kept as its own paragraph rather than
+    // silently dropped, the same as any other freeform (non-list) content.
+    it('keeps an invalid multi-letter roman numeral as a paragraph (matches no list pattern)', () => {
         const items = parseItems('iix. Bad roman numeral')
-        assert.deepEqual(items, [])
+        assert.deepEqual(items, [{
+            key: 'p', tag: 'p', type: null, level: null, indent: 0,
+            romanValue: null, orderValue: null, sectionBreak: false, lang: 'en',
+            content: 'iix. Bad roman numeral'
+        }])
     })
 
-    it('does not match a two-letter non-roman marker like "aa."', () => {
+    it('does not match a two-letter non-roman marker like "aa." as a list item', () => {
         const items = parseItems('aa. Not a valid single-letter marker')
-        assert.deepEqual(items, [])
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'aa. Not a valid single-letter marker')
     })
 
     it('requires whitespace after the marker punctuation', () => {
         const items = parseItems('1.NoSpaceAfterDot')
-        assert.deepEqual(items, [])
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, '1.NoSpaceAfterDot')
     })
 
-    it('an invalid leading marker line is silently dropped, not merged into anything', () => {
+    it('an invalid leading marker line is kept as a paragraph, and continuation lines glue onto it', () => {
         const items = parseItems('iix. Bad roman\nnext line text')
-        assert.deepEqual(items, [])
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'iix. Bad roman next line text')
     })
 })
 
@@ -186,8 +199,45 @@ describe('parseItems: continuation lines and blank lines', () => {
         assert.deepEqual(parseItems(''), [])
     })
 
-    it('returns an empty array for a plain paragraph with no markers', () => {
-        assert.deepEqual(parseItems('Just a paragraph\nwith no markers'), [])
+    it('keeps a plain paragraph with no markers as a single paragraph block', () => {
+        const items = parseItems('Just a paragraph\nwith no markers')
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'Just a paragraph with no markers')
+    })
+})
+
+describe('parseItems: header/label paragraphs are preserved, not dropped', () => {
+    it('keeps a leading message header line as its own paragraph before the first list', () => {
+        const items = parseItems('CANFORGEN 1/26 XXX 001/26 011200Z JAN 26\n\n1. First point.\n2. Second point.')
+        assert.equal(items.length, 3)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'CANFORGEN 1/26 XXX 001/26 011200Z JAN 26')
+        assert.equal(items[1].key, 'num-dot')
+        assert.equal(items[1].content, 'First point.')
+    })
+
+    it('splits two leading paragraphs separated by a blank line into separate <p> blocks', () => {
+        const items = parseItems('CANFORGEN 1/26 XXX 001/26 011200Z JAN 26\n\nRefs:\n\nA. First ref')
+        assert.equal(items.length, 3)
+        assert.deepEqual(items.map(i => i.tag), ['p', 'p', 'ol'])
+        assert.equal(items[0].content, 'CANFORGEN 1/26 XXX 001/26 011200Z JAN 26')
+        assert.equal(items[1].content, 'Refs:')
+        assert.equal(items[2].key, 'ALPHA-dot')
+    })
+
+    it('merges a paragraph split across lines by a docx soft line break (no blank line) into one block', () => {
+        const items = parseItems('First line of header\nsecond line, same paragraph')
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'First line of header second line, same paragraph')
+    })
+
+    it('does not glue a trailing paragraph onto a preceding list item across a section break', () => {
+        const items = parseItems('1. First\nEnd of English text//le texte français suit\nTitre français\nA. Second')
+        assert.equal(items.length, 2)
+        assert.equal(items[0].content, 'First')
+        assert.equal(items[1].content, 'Second')
     })
 })
 
@@ -375,29 +425,33 @@ describe('parseItems: alphabetic list overflow past z (aa, ab, ...)', () => {
 })
 
 describe('parseItems: inline reference-label markers', () => {
-    it('splits "References: A. text" so A. is recognized as a list item', () => {
+    it('splits "References: A. text" so A. is recognized as a list item, keeping the label as a paragraph', () => {
         const items = parseItems('References: A. First ref\nB. Second ref')
-        assert.equal(items.length, 2)
-        assert.deepEqual(items.map(i => i.key), ['ALPHA-dot', 'ALPHA-dot'])
-        assert.deepEqual(items.map(i => i.content), ['First ref', 'Second ref'])
+        assert.equal(items.length, 3)
+        assert.deepEqual(items.map(i => i.tag), ['p', 'ol', 'ol'])
+        assert.equal(items[0].content, 'References:')
+        assert.deepEqual(items.slice(1).map(i => i.key), ['ALPHA-dot', 'ALPHA-dot'])
+        assert.deepEqual(items.slice(1).map(i => i.content), ['First ref', 'Second ref'])
     })
 
     it('recognizes REFS:, Ref:, and Refs: as the same label', () => {
-        assert.equal(parseItems('REFS: A. x')[0].key, 'ALPHA-dot')
-        assert.equal(parseItems('Ref: A. x')[0].key, 'ALPHA-dot')
-        assert.equal(parseItems('Refs: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('REFS: A. x')[1].key, 'ALPHA-dot')
+        assert.equal(parseItems('Ref: A. x')[1].key, 'ALPHA-dot')
+        assert.equal(parseItems('Refs: A. x')[1].key, 'ALPHA-dot')
     })
 
     it('recognizes accented French label variants (Référence(s):, Réf(s):)', () => {
-        assert.equal(parseItems('Référence: A. x')[0].key, 'ALPHA-dot')
-        assert.equal(parseItems('Références: A. x')[0].key, 'ALPHA-dot')
-        assert.equal(parseItems('Réf: A. x')[0].key, 'ALPHA-dot')
-        assert.equal(parseItems('Réfs: A. x')[0].key, 'ALPHA-dot')
+        assert.equal(parseItems('Référence: A. x')[1].key, 'ALPHA-dot')
+        assert.equal(parseItems('Références: A. x')[1].key, 'ALPHA-dot')
+        assert.equal(parseItems('Réf: A. x')[1].key, 'ALPHA-dot')
+        assert.equal(parseItems('Réfs: A. x')[1].key, 'ALPHA-dot')
     })
 
-    it('leaves an unlabeled line with a colon before it unaffected', () => {
+    it('keeps an unlabeled line with a colon before it as a paragraph, unaffected by reference-splitting', () => {
         const items = parseItems('Note: see A. below for details')
-        assert.deepEqual(items, [])
+        assert.equal(items.length, 1)
+        assert.equal(items[0].tag, 'p')
+        assert.equal(items[0].content, 'Note: see A. below for details')
     })
 })
 

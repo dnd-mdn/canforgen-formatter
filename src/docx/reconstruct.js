@@ -32,13 +32,23 @@ function formatMarker(def, count) {
 export function reconstructPlainText(paragraphs, numbering) {
     const countsByNumId = new Map() // numId -> Map<ilvl, count>
     const lines = []
+    let prevWasPlainText = false
 
     for (const p of paragraphs) {
         const def = p.numId != null ? numbering.get(`${p.numId}:${p.ilvl}`) : null
         if (!def) {
+            // Word's paragraph mark is an unambiguous break -- two separate <w:p>
+            // plain-text paragraphs are never the same paragraph, even without an
+            // empty spacer paragraph between them in the source. A blank line here
+            // keeps parseItems() from gluing them into one <p> downstream.
+            if (prevWasPlainText && p.text.trim() && lines.length && lines[lines.length - 1].trim()) {
+                lines.push('')
+            }
             lines.push(p.text)
+            prevWasPlainText = true
             continue
         }
+        prevWasPlainText = false
 
         const levelCounts = countsByNumId.get(p.numId) || new Map()
         countsByNumId.set(p.numId, levelCounts)

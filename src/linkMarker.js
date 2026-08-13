@@ -6,7 +6,11 @@
 
 import { escapeHTML } from './html.js'
 
-const LINK_RE = /\[([^[\]]*)\]\(([^()]*)\)/g
+// Bold runs (e.g. a docx w:b run, or a message header/label meant to stand out)
+// are carried the same way as links -- as inline Markdown-style **bold** markers
+// -- so they survive the plain-text pipeline and the plaintext textarea stays
+// readable and editable.
+const TOKEN_RE = /\[([^[\]]*)\]\(([^()]*)\)|\*\*([^*]+)\*\*/g
 
 // .mil.ca links point at the National Defence intranet, which isn't reachable
 // from outside that network -- flag them inline so readers aren't left
@@ -43,19 +47,27 @@ export function encodeLink(href, text) {
     return `[${text}](${href})`
 }
 
+export function encodeBold(text) {
+    return `**${text}**`
+}
+
 export function renderContent(content, lang = 'en') {
     let result = ''
     let lastIndex = 0
-    LINK_RE.lastIndex = 0
+    TOKEN_RE.lastIndex = 0
     let m
-    while ((m = LINK_RE.exec(content))) {
+    while ((m = TOKEN_RE.exec(content))) {
         result += escapeHTML(content.slice(lastIndex, m.index))
-        const href = m[2]
-        const isMailto = /^mailto:/i.test(href)
-        const linkText = isMailto ? normalizeMailtoText(m[1]) : m[1]
-        result += `<a href="${escapeAttribute(href)}">${escapeHTML(linkText)}</a>`
-        if (isMilCaHost(href)) result += escapeHTML(MIL_CA_DISCLAIMER[lang] ?? MIL_CA_DISCLAIMER.en)
-        lastIndex = LINK_RE.lastIndex
+        if (m[3] !== undefined) {
+            result += `<strong>${escapeHTML(m[3])}</strong>`
+        } else {
+            const href = m[2]
+            const isMailto = /^mailto:/i.test(href)
+            const linkText = isMailto ? normalizeMailtoText(m[1]) : m[1]
+            result += `<a href="${escapeAttribute(href)}">${escapeHTML(linkText)}</a>`
+            if (isMilCaHost(href)) result += escapeHTML(MIL_CA_DISCLAIMER[lang] ?? MIL_CA_DISCLAIMER.en)
+        }
+        lastIndex = TOKEN_RE.lastIndex
     }
     result += escapeHTML(content.slice(lastIndex))
     return result

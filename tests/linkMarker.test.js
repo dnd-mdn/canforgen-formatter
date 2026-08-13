@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { encodeLink, renderContent } from '../src/linkMarker.js'
+import { encodeLink, encodeBold, renderContent } from '../src/linkMarker.js'
 
 describe('encodeLink / renderContent', () => {
     it('encodes as familiar markdown link syntax', () => {
@@ -34,6 +34,28 @@ describe('encodeLink / renderContent', () => {
         assert.equal(
             renderContent(content),
             '<a href="https://a.example">A</a> and <a href="https://b.example">B</a>'
+        )
+    })
+})
+
+describe('encodeBold / renderContent (bold)', () => {
+    it('encodes as familiar markdown bold syntax', () => {
+        assert.equal(encodeBold('Refs:'), '**Refs:**')
+    })
+
+    it('renders an encoded bold marker as a <strong> tag', () => {
+        assert.equal(renderContent(`${encodeBold('CANFORGEN 1/26')} header`), '<strong>CANFORGEN 1/26</strong> header')
+    })
+
+    it('escapes special characters inside bold text', () => {
+        assert.equal(renderContent(encodeBold('A & B <tag>')), '<strong>A &amp; B &lt;tag&gt;</strong>')
+    })
+
+    it('handles a link and a bold span in the same content independently', () => {
+        const content = `${encodeBold('Refs:')} see ${encodeLink('https://example.com', 'here')}`
+        assert.equal(
+            renderContent(content),
+            '<strong>Refs:</strong> see <a href="https://example.com">here</a>'
         )
     })
 })

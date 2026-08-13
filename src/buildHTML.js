@@ -33,6 +33,12 @@ export function buildHTML(items) {
     for (const item of items) {
         if (item.sectionBreak) closeAll()
 
+        if (item.tag === 'p') {
+            closeAll()
+            out += `<p>${renderContent(item.content, item.lang)}</p>\n`
+            continue
+        }
+
         if (stack.length === 0) {
             openList(item, 0)
             continue

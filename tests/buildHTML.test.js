@@ -63,6 +63,46 @@ describe('buildHTML: alphabetic list overflow past z', () => {
     })
 })
 
+describe('buildHTML: paragraph blocks (freeform text outside any list)', () => {
+    it('renders a leading header paragraph before a list, instead of dropping it', () => {
+        const html = buildHTML(parseItems('CANFORGEN 1/26 XXX 001/26 011200Z JAN 26\n\n1. First point.'))
+        assert.equal(
+            html,
+            '<p>CANFORGEN 1/26 XXX 001/26 011200Z JAN 26</p>\n<ol>\n  <li>First point.\n  </li>\n</ol>'
+        )
+    })
+
+    it('renders bold paragraph text as <strong> when marked with **bold**', () => {
+        const html = buildHTML(parseItems('**CANFORGEN 1/26**\n\n**Refs:**\nA. First ref'))
+        assert.ok(html.startsWith('<p><strong>CANFORGEN 1/26</strong></p>\n<p><strong>Refs:</strong></p>\n<ol type="A">'))
+    })
+
+    it('closes a nested list before rendering the paragraph that follows it in a new section', () => {
+        // Text directly following a list item still glues onto that item (existing,
+        // unchanged behavior) -- a fresh paragraph can only start once the language
+        // break has produced a new marked item to anchor the next section onto.
+        const html = buildHTML(parseItems(
+            'CANFORGEN 1/26\n\n1. Top\n   a. Nested\nEnd of English text//le texte français suit\n2. Section deux'
+        ))
+        assert.equal(
+            html,
+            '<p>CANFORGEN 1/26</p>\n' +
+            '<ol>\n' +
+            '  <li>Top\n' +
+            '    <ol type="a">\n' +
+            '      <li>Nested\n' +
+            '      </li>\n' +
+            '    </ol>\n' +
+            '  </li>\n' +
+            '</ol>\n' +
+            '<ol>\n' +
+            '  <li>Section deux\n' +
+            '  </li>\n' +
+            '</ol>'
+        )
+    })
+})
+
 describe('buildHTML: nesting by indentation', () => {
     it('nests a lettered list inside a numbered item via indentation', () => {
         const html = buildHTML(parseItems('1. Top\n   a. Nested\n2. Top two'))

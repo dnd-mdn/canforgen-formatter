@@ -117,6 +117,40 @@ describe('docx/paragraphs', () => {
         const [paragraph] = parseParagraphs(`<w:p>${xml}</w:p>`, new Map())
         assert.equal(paragraph.text, 'dangling link')
     })
+
+    it('wraps a bold run in an encoded bold marker, rendered as <strong>', () => {
+        const xml = '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Refs:</w:t></w:r></w:p>'
+        const [paragraph] = parseParagraphs(xml)
+        assert.equal(paragraph.text, '**Refs:**')
+        assert.equal(renderContent(paragraph.text), '<strong>Refs:</strong>')
+    })
+
+    it('leaves a plain run (no rPr) unwrapped', () => {
+        const xml = '<w:p><w:r><w:t>plain text</w:t></w:r></w:p>'
+        const [paragraph] = parseParagraphs(xml)
+        assert.equal(paragraph.text, 'plain text')
+    })
+
+    it('does not bold a run whose rPr has other properties but no <w:b/>', () => {
+        const xml = '<w:p><w:r><w:rPr><w:i/></w:rPr><w:t>italic only</w:t></w:r></w:p>'
+        const [paragraph] = parseParagraphs(xml)
+        assert.equal(paragraph.text, 'italic only')
+    })
+
+    it('respects an explicit <w:b w:val="false"/> turning off inherited bold', () => {
+        const xml = '<w:p><w:r><w:rPr><w:b w:val="false"/></w:rPr><w:t>not bold</w:t></w:r></w:p>'
+        const [paragraph] = parseParagraphs(xml)
+        assert.equal(paragraph.text, 'not bold')
+    })
+
+    it('joins mixed bold and plain runs within one paragraph, only wrapping the bold run', () => {
+        const xml = '<w:p><w:r><w:t xml:space="preserve">See </w:t></w:r>' +
+            '<w:r><w:rPr><w:b/></w:rPr><w:t>important</w:t></w:r>' +
+            '<w:r><w:t xml:space="preserve"> notice.</w:t></w:r></w:p>'
+        const [paragraph] = parseParagraphs(xml)
+        assert.equal(paragraph.text, 'See **important** notice.')
+        assert.equal(renderContent(paragraph.text), 'See <strong>important</strong> notice.')
+    })
 })
 
 describe('docx/relationships', () => {
@@ -142,6 +176,43 @@ describe('docx/reconstruct', () => {
     it('passes through plain paragraphs unchanged', () => {
         const paragraphs = [{ numId: null, ilvl: null, text: '1. Purpose' }]
         assert.equal(reconstructPlainText(paragraphs, numbering), '1. Purpose')
+    })
+
+    it('inserts a blank line between two consecutive plain-text Word paragraphs with no spacer between them', () => {
+        // Word's paragraph mark alone means "new paragraph" -- even without an
+        // empty spacer <w:p>, e.g. a header line immediately followed by a title
+        // paragraph -- so downstream parseItems() must see them as separate <p>s.
+        const paragraphs = [
+            { numId: null, ilvl: null, text: 'CANFORGEN 130/26 CMP 057/26 211707Z JUL 26' },
+            { numId: null, ilvl: null, text: '**2026 TITLE**' },
+        ]
+        assert.equal(
+            reconstructPlainText(paragraphs, numbering),
+            'CANFORGEN 130/26 CMP 057/26 211707Z JUL 26\n\n**2026 TITLE**'
+        )
+    })
+
+    it('does not double up a blank line when an explicit empty spacer paragraph is already present', () => {
+        const paragraphs = [
+            { numId: null, ilvl: null, text: 'First paragraph' },
+            { numId: null, ilvl: null, text: '' },
+            { numId: null, ilvl: null, text: 'Second paragraph' },
+        ]
+        assert.equal(
+            reconstructPlainText(paragraphs, numbering),
+            'First paragraph\n\nSecond paragraph'
+        )
+    })
+
+    it('does not insert a blank line between a list item and the plain paragraph that follows it', () => {
+        const paragraphs = [
+            { numId: '11', ilvl: 0, text: 'First sub-point' },
+            { numId: null, ilvl: null, text: 'Signed by General Someone' },
+        ]
+        assert.equal(
+            reconstructPlainText(paragraphs, numbering),
+            'a. First sub-point\nSigned by General Someone'
+        )
     })
 
     it('synthesizes incrementing letter markers for an auto-numbered list', () => {

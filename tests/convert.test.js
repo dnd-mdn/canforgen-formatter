@@ -9,8 +9,8 @@ describe('convert', () => {
         assert.equal(convert('   \n  '), '')
     })
 
-    it('returns an empty string when nothing in the input matches a list pattern', () => {
-        assert.equal(convert('Just a paragraph\nwith no markers'), '')
+    it('wraps input with no list markers as a paragraph instead of dropping it', () => {
+        assert.equal(convert('Just a paragraph\nwith no markers'), '<p>Just a paragraph with no markers</p>')
     })
 
     it('produces the same result as parseItems + buildHTML', () => {

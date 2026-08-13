@@ -3,15 +3,36 @@
 // plain-text content. Doesn't handle tables or text boxes -- CANFORGEN
 // bodies are plain paragraph flow.
 
-import { encodeLink } from '../linkMarker.js'
+import { encodeLink, encodeBold } from '../linkMarker.js'
 import { attrVal } from './xml.js'
+
+// A run is bold if it carries <w:b/> (or <w:b w:val="..."/>) with a truthy value --
+// <w:b w:val="false"/> (or "0"/"off") explicitly turns inherited bold back off.
+function isBoldRun(rPr) {
+    const m = rPr.match(/<w:b(\s[^>]*)?\/>/)
+    if (!m) return false
+    const val = m[1]?.match(/w:val="([^"]*)"/)?.[1]?.toLowerCase()
+    return val === undefined || !['false', '0', 'off'].includes(val)
+}
+
+function extractRunText(runBody) {
+    let text = ''
+    const re = /<w:t[^>]*>([^<]*)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g
+    let m
+    while ((m = re.exec(runBody))) {
+        if (m[1] !== undefined) text += m[1]
+        else if (m[0].startsWith('<w:tab')) text += ' '
+        else if (m[0].startsWith('<w:br')) text += '\n'
+    }
+    return text
+}
 
 function extractText(body, relationships) {
     // Drop tracked-change deletions; their text shouldn't appear in output.
     const withoutDeletions = body.replace(/<w:del[ >][\s\S]*?<\/w:del>/g, '')
 
     let text = ''
-    const tokenRe = /<w:hyperlink[^>]*\sr:id="([^"]+)"[^>]*>([\s\S]*?)<\/w:hyperlink>|<w:t[^>]*>([^<]*)<\/w:t>|<w:tab\s*\/>|<w:br\s*\/>/g
+    const tokenRe = /<w:hyperlink[^>]*\sr:id="([^"]+)"[^>]*>([\s\S]*?)<\/w:hyperlink>|<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>|<w:tab\s*\/>|<w:br\s*\/>/g
     let m
     while ((m = tokenRe.exec(withoutDeletions))) {
         if (m[1] !== undefined) {
@@ -21,7 +42,10 @@ function extractText(body, relationships) {
             const linkText = extractText(m[2], relationships)
             text += href ? encodeLink(href, linkText) : linkText
         } else if (m[3] !== undefined) {
-            text += m[3]
+            const runBody = m[3]
+            const rPrMatch = runBody.match(/<w:rPr>([\s\S]*?)<\/w:rPr>/)
+            const runText = extractRunText(runBody)
+            text += rPrMatch && isBoldRun(rPrMatch[1]) && runText.trim() ? encodeBold(runText) : runText
         } else if (m[0].startsWith('<w:tab')) {
             text += ' '
         } else if (m[0].startsWith('<w:br')) {
