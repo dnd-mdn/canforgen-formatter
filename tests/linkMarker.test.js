@@ -138,3 +138,95 @@ describe('renderContent: mailto spelled-out punctuation', () => {
         assert.equal(renderContent(content), '<a href="mailto:csor.recruiting@forces.gc.ca">csor.recruiting@forces.gc.ca</a>')
     })
 })
+
+describe('renderContent: bare email auto-linking', () => {
+    it('links a plain email address typed as bare text (never a docx hyperlink)', () => {
+        assert.equal(
+            renderContent('Contact james.terpstra@forces.gc.ca for details.'),
+            'Contact <a href="mailto:james.terpstra@forces.gc.ca">james.terpstra@forces.gc.ca</a> for details.'
+        )
+    })
+
+    it('links a bare address with a hyphenated local part and multi-label domain', () => {
+        assert.equal(
+            renderContent('john.hounsell-drover@forces.gc.ca'),
+            '<a href="mailto:john.hounsell-drover@forces.gc.ca">john.hounsell-drover@forces.gc.ca</a>'
+        )
+    })
+
+    it('links a bare address written with spelled-out accessible tokens, keeping the original text but normalizing the href', () => {
+        assert.equal(
+            renderContent('otgrecruit(at)forces.gc.ca'),
+            '<a href="mailto:otgrecruit@forces.gc.ca">otgrecruit(at)forces.gc.ca</a>'
+        )
+        assert.equal(
+            renderContent('cjiru(underscore)recruiting(at)forces.gc.ca'),
+            '<a href="mailto:cjiru_recruiting@forces.gc.ca">cjiru(underscore)recruiting(at)forces.gc.ca</a>'
+        )
+    })
+
+    it('links multiple bare addresses in the same content independently', () => {
+        const content = 'a@example.com or b@example.com'
+        assert.equal(
+            renderContent(content),
+            '<a href="mailto:a@example.com">a@example.com</a> or <a href="mailto:b@example.com">b@example.com</a>'
+        )
+    })
+
+    it('does not double-wrap an address that is already an encoded [text](url) link', () => {
+        const content = encodeLink('mailto:a@example.com', 'a@example.com')
+        assert.equal(renderContent(content), '<a href="mailto:a@example.com">a@example.com</a>')
+    })
+
+    it('does not linkify a bare address inside a **bold** span (no nested markdown)', () => {
+        const content = encodeBold('Contact a@example.com')
+        assert.equal(renderContent(content), '<strong>Contact a@example.com</strong>')
+    })
+
+    it('escapes HTML-special characters around a bare address', () => {
+        assert.equal(
+            renderContent('A & B a@example.com <tag>'),
+            'A &amp; B <a href="mailto:a@example.com">a@example.com</a> &lt;tag&gt;'
+        )
+    })
+})
+
+describe('renderContent: DND GroupWise/intranet pseudo-address auto-linking', () => {
+    it('links a single-"+" GroupWise address, matching canada.ca\'s own (non-functional) mailto behavior', () => {
+        const content = 'Intranet: +CMP ARC - CRA CPM@CMP D Mil Pers Mgt@Ottawa-Hull, or by calling 1-833-445-1182.'
+        assert.equal(
+            renderContent(content),
+            'Intranet: <a href="mailto:+CMP%20ARC%20-%20CRA%20CPM@CMP%20D%20Mil%20Pers%20Mgt@Ottawa-Hull">' +
+            '+CMP ARC - CRA CPM@CMP D Mil Pers Mgt@Ottawa-Hull</a>, or by calling 1-833-445-1182.'
+        )
+    })
+
+    it('links a double-"++" GroupWise address and stops the match at " or ", not swallowing the next contact', () => {
+        const content = 'or ++otgrecruit@cansofcom@ottawa-hull or otgrecruit@forces.gc.ca'
+        assert.equal(
+            renderContent(content),
+            'or <a href="mailto:++otgrecruit@cansofcom@ottawa-hull">++otgrecruit@cansofcom@ottawa-hull</a>' +
+            ' or <a href="mailto:otgrecruit@forces.gc.ca">otgrecruit@forces.gc.ca</a>'
+        )
+    })
+
+    it('links a GroupWise address with multi-word segments on both sides of "@"', () => {
+        const content = '++cjiru recruiting@cfb trenton@trenton or cjiru_recruiting@forces.gc.ca'
+        assert.equal(
+            renderContent(content),
+            '<a href="mailto:++cjiru%20recruiting@cfb%20trenton@trenton">++cjiru recruiting@cfb trenton@trenton</a>' +
+            ' or <a href="mailto:cjiru_recruiting@forces.gc.ca">cjiru_recruiting@forces.gc.ca</a>'
+        )
+    })
+
+    it('links a GroupWise address written with fully spelled-out accessible tokens', () => {
+        assert.equal(
+            renderContent('(plus)(plus)otgrecruit(at)cansofcom(at)ottawa(dash)hull'),
+            '<a href="mailto:++otgrecruit@cansofcom@ottawa-hull">(plus)(plus)otgrecruit(at)cansofcom(at)ottawa(dash)hull</a>'
+        )
+    })
+
+    it('does not mistake a "+1-xxx-xxx-xxxx" phone number for a GroupWise address (no letter follows the +)', () => {
+        assert.equal(renderContent('call +1-833-445-1182 for help'), 'call +1-833-445-1182 for help')
+    })
+})

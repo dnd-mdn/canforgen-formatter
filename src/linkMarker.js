@@ -10,7 +10,7 @@ import { escapeHTML } from './html.js'
 // are carried the same way as links -- as inline Markdown-style **bold** markers
 // -- so they survive the plain-text pipeline and the plaintext textarea stays
 // readable and editable.
-const TOKEN_RE = /\[([^[\]]*)\]\(([^()]*)\)|\*\*([^*]+)\*\*/g
+const LINK_AND_BOLD_RE = String.raw`\[([^[\]]*)\]\(([^()]*)\)|\*\*([^*]+)\*\*`
 
 // .mil.ca links point at the National Defence intranet, which isn't reachable
 // from outside that network -- flag them inline so readers aren't left
@@ -39,6 +39,38 @@ function normalizeMailtoText(text) {
     return text.replace(MAILTO_TOKEN_RE, m => MAILTO_TOKENS[m.toLowerCase()])
 }
 
+// Bare email addresses typed or pasted as plain text (never a real docx
+// hyperlink) aren't linked at all otherwise. Both the normal symbol and the
+// spelled-out accessible token (see MAILTO_TOKENS above) are recognized for
+// each punctuation mark, since CANFORGEN authors use either inconsistently.
+const AT = String.raw`(?:@|\(at\))`
+const PLUS = String.raw`(?:\+|\(plus\))`
+const DASH = String.raw`(?:-|\(dash\))`
+const UNDERSCORE = String.raw`(?:_|\(underscore\))`
+
+// local-part@domain.tld -- the local part and domain labels may each use the
+// spelled-out tokens in place of -, _, or +.
+const EMAIL_SRC = String.raw`[A-Za-z0-9](?:[A-Za-z0-9.]|${DASH}|${UNDERSCORE}|${PLUS})*${AT}` +
+    String.raw`[A-Za-z0-9](?:[A-Za-z0-9]|${DASH})*(?:\.[A-Za-z0-9](?:[A-Za-z0-9]|${DASH})*)+`
+
+// DND's legacy intranet/GroupWise-style address: one or two leading "+" (or
+// spelled "(plus)"), then three @-separated segments -- display name, org
+// unit, location -- e.g. "+CMP ARC - CRA CPM@CMP D Mil Pers Mgt@Ottawa-Hull".
+// These aren't real internet addresses (a mailto: link to one won't work),
+// but canada.ca's own published CANFORGENs link them the same as real emails,
+// so this matches that rather than silently leaving them as plain text.
+const GROUPWISE_WORDS = String.raw`[A-Za-z](?:[A-Za-z0-9 '.]|${DASH}|${UNDERSCORE}){0,60}?`
+const GROUPWISE_SRC = String.raw`${PLUS}{1,2}${GROUPWISE_WORDS}${AT}${GROUPWISE_WORDS}${AT}` +
+    String.raw`[A-Za-z](?:[A-Za-z0-9]|${DASH}){0,40}`
+
+// Single combined tokenizer: explicit [text](url) links and **bold** markers,
+// plus bare email/pseudo-addresses typed or pasted as plain text (never a real
+// docx hyperlink, so otherwise never linked at all). The GroupWise form is
+// tried before the plain email form -- it's the more specific, longer match,
+// and trying email first would grab only its trailing "word@word" pair and
+// leave the "+...@" prefix as stray text.
+const TOKEN_RE = new RegExp(`${LINK_AND_BOLD_RE}|(${GROUPWISE_SRC})|(${EMAIL_SRC})`, 'gi')
+
 function escapeAttribute(text) {
     return escapeHTML(text).replace(/"/g, '&quot;')
 }
@@ -60,6 +92,13 @@ export function renderContent(content, lang = 'en') {
         result += escapeHTML(content.slice(lastIndex, m.index))
         if (m[3] !== undefined) {
             result += `<strong>${escapeHTML(m[3])}</strong>`
+        } else if (m[4] !== undefined || m[5] !== undefined) {
+            // A bare email or GroupWise-style address typed as plain text --
+            // never a real docx hyperlink, so the mailto: href has to be built
+            // from the matched text itself (normalized to real punctuation).
+            const bareAddress = m[4] ?? m[5]
+            const href = `mailto:${encodeURI(normalizeMailtoText(bareAddress))}`
+            result += `<a href="${escapeAttribute(href)}">${escapeHTML(bareAddress)}</a>`
         } else {
             const href = m[2]
             const isMailto = /^mailto:/i.test(href)
