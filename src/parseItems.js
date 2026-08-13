@@ -1,6 +1,17 @@
 import { PATTERNS, isRomanKey, isNumericKey, isAlphaKey } from './patterns.js'
 import { romanToInt } from './roman.js'
 
+// Converts an alphabetic list marker to its ordinal position, matching the
+// bijective base-26 scheme browsers use to render lower-alpha/upper-alpha
+// counters past "z" (…, x, y, z, aa, ab, ac, …), so a → 1, z → 26, aa → 27.
+function alphaToInt(marker) {
+    let value = 0
+    for (const ch of marker.toLowerCase()) {
+        value = value * 26 + (ch.charCodeAt(0) - 96)
+    }
+    return value
+}
+
 // "References: A. text" (also Refs:/REFS:/Référence(s):/Réf(s):) glues the first
 // marker onto the label line, hiding it from the per-line marker detection below.
 // Split the marker onto its own line so it can be recognized like the rest of the list.
@@ -91,8 +102,20 @@ export function parseItems(text) {
                     const marker = line.match(/^\s*\(?(\d+)\)?[\.)]\s+/)?.[1]
                     if (marker) orderValue = Number(marker)
                 } else if (isAlphaKey(p.key)) {
-                    const marker = line.match(/^\s*\(?([A-Za-z])\)?[\.)]\s+/)?.[1]
-                    if (marker) orderValue = marker.toLowerCase().charCodeAt(0) - 96
+                    const marker = line.match(/^\s*\(?([A-Za-z]+)\)?[\.)]\s+/)?.[1]
+                    if (marker) {
+                        orderValue = alphaToInt(marker)
+
+                        // Multi-letter markers ("aa.", "ab.") only mean a continued
+                        // alpha list past "z" -- on their own they're indistinguishable
+                        // from an ordinary lowercase word ending a sentence, e.g. "also."
+                        if (marker.length > 1) {
+                            const prev = lastItemAtIndent(indent)
+                            const prevIsAlpha = prev && isAlphaKey(prev.key) && typeof prev.orderValue === 'number'
+                            const continuesAlphaSequence = prevIsAlpha && orderValue === prev.orderValue + 1
+                            if (!continuesAlphaSequence) continue
+                        }
+                    }
                 }
                 items.push({
                     key: p.key,
