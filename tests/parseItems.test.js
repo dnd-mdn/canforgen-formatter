@@ -300,6 +300,57 @@ describe('parseItems: alphabetic lists with ambiguous single letters', () => {
     })
 })
 
+describe('parseItems: alphabetic list overflow past z (aa, ab, ...)', () => {
+    it('continues a lowercase alpha list past z into aa, ab (dot)', () => {
+        const items = parseItems('x. Item x\ny. Item y\nz. Item z\naa. Item aa\nab. Item ab')
+        assert.equal(items.length, 5)
+        assert.ok(items.every(i => i.key === 'alpha-dot'), 'aa./ab. should stay alpha-dot, not be dropped')
+        assert.deepEqual(items.map(i => i.orderValue), [24, 25, 26, 27, 28])
+        assert.deepEqual(items.map(i => i.content), ['Item x', 'Item y', 'Item z', 'Item aa', 'Item ab'])
+    })
+
+    it('continues a lowercase alpha list past z into aa, ab (rparen)', () => {
+        const items = parseItems('y) Item y\nz) Item z\naa) Item aa\nab) Item ab')
+        assert.ok(items.every(i => i.key === 'alpha-rparen'))
+        assert.deepEqual(items.map(i => i.orderValue), [25, 26, 27, 28])
+    })
+
+    it('continues an uppercase alpha list past Z into AA, AB', () => {
+        const items = parseItems('Y. Item Y\nZ. Item Z\nAA. Item AA\nAB. Item AB')
+        assert.ok(items.every(i => i.key === 'ALPHA-dot'))
+        assert.deepEqual(items.map(i => i.orderValue), [25, 26, 27, 28])
+    })
+
+    it('continues a parenthesized alpha list past z into (aa), (ab)', () => {
+        const items = parseItems('(y) Item y\n(z) Item z\n(aa) Item aa\n(ab) Item ab')
+        assert.ok(items.every(i => i.key === 'alpha-paren'))
+        assert.deepEqual(items.map(i => i.orderValue), [25, 26, 27, 28])
+    })
+
+    it('does not treat an ordinary lowercase word ending a sentence as an overflow marker', () => {
+        const items = parseItems('a. First item\nb. Second item\nalso. this is prose, not a list marker.')
+        assert.equal(items.length, 2)
+        assert.equal(items[1].content, 'Second item also. this is prose, not a list marker.')
+    })
+
+    it('does not treat a multi-letter marker as overflow when it does not continue the sequence', () => {
+        // "z." is the 26th letter; "ac." would be the 29th, skipping 27 (aa) and 28 (ab),
+        // so it is not a valid continuation and should not be recognized as a marker.
+        const items = parseItems('z. Item z\nac. Not a valid continuation')
+        assert.equal(items.length, 1)
+        assert.equal(items[0].content, 'Item z ac. Not a valid continuation')
+    })
+
+    it('continues an overflow sequence across dot/rparen style, like roman numerals do', () => {
+        const items = parseItems('z) Item z\naa. Item aa')
+        assert.equal(items.length, 2)
+        assert.equal(items[0].key, 'alpha-rparen')
+        assert.equal(items[1].key, 'alpha-dot')
+        assert.equal(items[1].orderValue, 27)
+        assert.equal(items[1].content, 'Item aa')
+    })
+})
+
 describe('parseItems: inline reference-label markers', () => {
     it('splits "References: A. text" so A. is recognized as a list item', () => {
         const items = parseItems('References: A. First ref\nB. Second ref')

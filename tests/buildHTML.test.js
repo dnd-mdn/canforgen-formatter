@@ -39,6 +39,30 @@ describe('buildHTML: basic structure', () => {
     })
 })
 
+describe('buildHTML: alphabetic list overflow past z', () => {
+    it('keeps items continuing past z (aa, ab) in a single ol, letting the browser render the counters', () => {
+        const html = buildHTML(parseItems('x. Item x\ny. Item y\nz. Item z\naa. Item aa\nab. Item ab'))
+        assert.equal((html.match(/<ol/g) || []).length, 1)
+        assert.equal((html.match(/<li>/g) || []).length, 5)
+        assert.match(html, /<ol type="a">/)
+        assert.equal(
+            html,
+            '<ol type="a">\n' +
+            '  <li>Item x\n' +
+            '  </li>\n' +
+            '  <li>Item y\n' +
+            '  </li>\n' +
+            '  <li>Item z\n' +
+            '  </li>\n' +
+            '  <li>Item aa\n' +
+            '  </li>\n' +
+            '  <li>Item ab\n' +
+            '  </li>\n' +
+            '</ol>'
+        )
+    })
+})
+
 describe('buildHTML: nesting by indentation', () => {
     it('nests a lettered list inside a numbered item via indentation', () => {
         const html = buildHTML(parseItems('1. Top\n   a. Nested\n2. Top two'))
